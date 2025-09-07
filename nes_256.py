@@ -65,8 +65,6 @@ SBOX = [
     0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
 ]
 
-# --- Utility: simple HKDF (HMAC-SHA256) used to expand master key into round keys ---
-
 def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
     return hmac.new(salt, ikm, hashlib.sha256).digest()
 
@@ -92,7 +90,6 @@ def derive_round_keys(master_key: bytes, nonce: bytes) -> list[bytes]:
     keys = [okm[i*16:(i+1)*16] for i in range(ROUNDS + 1)]
     return keys
 
-# --- AES-like primitive layers ---
 
 def sub_bytes(state: bytearray) -> None:
     for i in range(len(state)):
@@ -100,20 +97,19 @@ def sub_bytes(state: bytearray) -> None:
 
 
 def shift_rows(state: bytearray) -> None:
-    # state is 16 bytes in column-major order like AES
-    # rows: 0..3
+
     s = list(state)
-    # Row 1 rotate left 1
+
     state[1]  = s[5]
     state[5]  = s[9]
     state[9]  = s[13]
     state[13] = s[1]
-    # Row 2 rotate left 2
+
     state[2]  = s[10]
     state[6]  = s[14]
     state[10] = s[2]
     state[14] = s[6]
-    # Row 3 rotate left 3
+
     state[3]  = s[15]
     state[7]  = s[3]
     state[11] = s[7]
@@ -144,7 +140,7 @@ def add_round_key(state: bytearray, roundkey: bytes) -> None:
     for i in range(BLOCK_SIZE):
         state[i] ^= roundkey[i]
 
-# --- Block encryption (single block) ---
+
 
 def encrypt_block(block: bytes, round_keys: list[bytes]) -> bytes:
     if len(block) != BLOCK_SIZE:
@@ -156,13 +152,12 @@ def encrypt_block(block: bytes, round_keys: list[bytes]) -> bytes:
         shift_rows(state)
         mix_columns(state)
         add_round_key(state, round_keys[r])
-    # final round
+
     sub_bytes(state)
     shift_rows(state)
     add_round_key(state, round_keys[ROUNDS])
     return bytes(state)
 
-# --- CTR mode and AE (Encrypt-then-MAC with HMAC-SHA256) ---
 
 def _int_to_block(n: int) -> bytes:
     return n.to_bytes(16, 'big')
@@ -174,7 +169,7 @@ def ctr_keystream(master_key: bytes, nonce: bytes, length: int) -> bytes:
     counter = 0
     while len(out) < length:
         iv = bytearray(nonce)
-        # XOR last 8 bytes with counter (simple counter placement)
+
         ctr_block = int.from_bytes(iv[8:], 'big') ^ counter
         iv[8:] = ctr_block.to_bytes(8, 'big')
         block = encrypt_block(bytes(iv), round_keys)
@@ -228,7 +223,7 @@ def decrypt(token_b64: str, key: bytes, aad: bytes = b"") -> bytes:
     plaintext = bytes(a ^ b for a,b in zip(ciphertext, ks))
     return plaintext
 
-# --- Demo when run as script ---
+
 if __name__ == '__main__':
     print('NES256 demo (toy)')
     key = generate_key()
@@ -239,7 +234,7 @@ if __name__ == '__main__':
     print('Token:', token)
     pt = decrypt(token, key, aad=aad)
     print('Decrypted:', pt.decode('utf-8'))
-    # tamper test
+
     try:
         bad = bytearray(base64.b64decode(token))
         if len(bad) > NONCE_SIZE + 2:
